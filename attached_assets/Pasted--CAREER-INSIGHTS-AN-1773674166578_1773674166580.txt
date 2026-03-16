@@ -1,0 +1,212 @@
+# ============================================================================
+# CAREER INSIGHTS ANALYZER - GROQ VERSION (COLAB SECRETS)
+# ============================================================================
+
+# STEP 1: Install packages
+!pip install -q groq pydantic
+
+# STEP 2: Imports
+from groq import Groq
+from pydantic import BaseModel, Field
+from typing import List
+import json
+from google.colab import userdata
+
+print("✓ All packages installed and imported successfully\n")
+
+# ============================================================================
+# DATA MODELS
+# ============================================================================
+
+class JobRole(BaseModel):
+    title: str = Field(description="Job role title")
+    count: int = Field(description="Number of openings")
+
+class Skill(BaseModel):
+    name: str = Field(description="Skill name")
+    importance: str = Field(description="High, Medium, or Low")
+
+class SalaryRange(BaseModel):
+    minimum: int
+    average: int
+    maximum: int
+
+class CareerInsights(BaseModel):
+    career_field: str
+    growth_outlook: str
+    salary_range: SalaryRange
+    common_roles: List[JobRole]
+    technical_skills: List[Skill]
+    soft_skills: List[Skill]
+    top_locations: List[str]
+    market_demand: str
+
+
+# ============================================================================
+# GROQ ANALYZER
+# ============================================================================
+
+class GroqCareerAnalyzer:
+
+    def __init__(self, api_key):
+        self.client = Groq(api_key=api_key)
+        self.model = "llama-3.3-70b-versatile"
+        print("✓ Groq AI initialized successfully")
+
+    def clean_json(self, text):
+        """
+        Remove markdown formatting from LLM output
+        """
+
+        text = text.strip()
+
+        if text.startswith("```"):
+            text = text.split("```")[1]
+
+        if text.startswith("json"):
+            text = text.replace("json", "", 1).strip()
+
+        return text
+
+    def analyze_career_field(self, career_field, location="India"):
+
+        print(f"\nAnalyzing job market for: {career_field}")
+        print("=" * 60)
+
+        prompt = f"""
+Analyze the job market for '{career_field}' in {location}.
+
+Return ONLY JSON in the format:
+
+{{
+ "career_field": "",
+ "growth_outlook": "",
+ "salary_range": {{
+    "minimum": 0,
+    "average": 0,
+    "maximum": 0
+ }},
+ "common_roles": [
+    {{"title": "", "count": 0}}
+ ],
+ "technical_skills": [
+    {{"name": "", "importance": "High"}}
+ ],
+ "soft_skills": [
+    {{"name": "", "importance": "High"}}
+ ],
+ "top_locations": [],
+ "market_demand": ""
+}}
+
+Requirements:
+- Top 5 job roles
+- Top technical skills
+- Top soft skills
+- Top hiring cities in India
+- Salary estimates for 2025
+"""
+
+        try:
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a job market analyst."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2
+            )
+
+            result_text = response.choices[0].message.content
+
+            # Clean JSON from markdown
+            result_text = self.clean_json(result_text)
+
+            insights = CareerInsights.model_validate_json(result_text)
+
+            return insights
+
+        except Exception as e:
+            print("Error:", e)
+            return None
+
+
+    def display_insights(self, insights):
+
+        if not insights:
+            print("No insights available")
+            return
+
+        print("\n================ CAREER INSIGHTS =================")
+
+        print("\nCareer Field:", insights.career_field)
+        print("Growth Outlook:", insights.growth_outlook)
+
+        print("\nSalary Range (INR/year)")
+        print("Minimum:", insights.salary_range.minimum)
+        print("Average:", insights.salary_range.average)
+        print("Maximum:", insights.salary_range.maximum)
+
+        print("\nTop Job Roles")
+        for role in insights.common_roles:
+            print("-", role.title, "(", role.count, "openings )")
+
+        print("\nTechnical Skills")
+        for skill in insights.technical_skills:
+            print("-", skill.name, "(", skill.importance, ")")
+
+        print("\nSoft Skills")
+        for skill in insights.soft_skills:
+            print("-", skill.name, "(", skill.importance, ")")
+
+        print("\nTop Hiring Locations")
+        for loc in insights.top_locations:
+            print("-", loc)
+
+        print("\nMarket Demand")
+        print(insights.market_demand)
+
+        print("\n==================================================")
+
+
+# ============================================================================
+# MAIN PROGRAM
+# ============================================================================
+
+print("🚀 CAREER INSIGHTS ANALYZER (Powered by GROQ)")
+print("=" * 60)
+
+# Get API key from Colab Secrets
+api_key = userdata.get("GROQ_API_KEY")
+
+# Initialize analyzer
+analyzer = GroqCareerAnalyzer(api_key)
+
+# User input
+career_field = input("\nEnter career field (example: data analyst, teacher, doctor): ").strip()
+
+if career_field:
+
+    insights = analyzer.analyze_career_field(career_field)
+
+    if insights:
+
+        analyzer.display_insights(insights)
+
+        # Save results
+        filename = career_field.replace(" ", "_") + "_insights.json"
+
+        with open(filename, "w") as f:
+            json.dump(insights.model_dump(), f, indent=2)
+
+        print("\n✓ Results saved to:", filename)
+
+        # Download file
+        from google.colab import files
+        files.download(filename)
+
+else:
+    print("✗ No career field entered")
+
+print("\n✅ Analysis complete!")

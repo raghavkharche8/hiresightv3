@@ -1,0 +1,7 @@
+project_id = "oncnphlltabyplwgbvlt"
+
+[functions.scrape-jobs]
+verify_jwt = false
+
+[functions.analyze-career]
+verify_jwt = false
